@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "Task": {
+      "title": "Task",
+      "description": "Una actividad o entregable del emprendimiento.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pendiente", "en-proceso", "completado", "urgente", "descartado"] },
+        "priority": { "type": "string", "enum": ["baja", "media", "alta", "muy-alto"] },
+        "responsible": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "projectId": { "type": "string" },
+        "actions": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "status", "responsible", "endDate"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Un emprendimiento o proyecto específico.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "telegramChatId": { "type": "string" },
+        "telegramBotToken": { "type": "string" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["name", "ownerId"]
+    }
+  },
+  "firestore": {
+    "/projects": {
+      "schema": "Project",
+      "description": "Colección de proyectos/emprendimientos."
+    },
+    "/projects/{projectId}/tasks": {
+      "schema": "Task",
+      "description": "Tareas asociadas a un proyecto específico."
+    }
+  }
+}

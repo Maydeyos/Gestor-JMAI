@@ -1,0 +1,7 @@
+{
+  "name": "Gestor de Emprendimientos JM",
+  "description": "Aplicación ágil para gestionar actividades, entregables y recordatorios por Telegram para equipos de emprendimiento.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

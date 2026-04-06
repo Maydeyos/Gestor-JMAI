@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isProjectMember(projectId) {
+      // For simplicity in this agile tool, we'll allow authenticated users to access projects
+      // In a production app, we'd check a members subcollection or field
+      return isAuthenticated();
+    }
+
+    match /projects/{projectId} {
+      allow read, write: if isAuthenticated();
+      
+      match /tasks/{taskId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+    
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}
