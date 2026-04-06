@@ -458,6 +458,38 @@ export default function App() {
     addToast("Configuración reparada con valores por defecto 🛠️");
   };
 
+  // REPARACION DE DATOS: Migrar tareas de la llave antigua a la nueva
+  const repairLocalData = () => {
+    try {
+      const oldTasks = localStorage.getItem("local-tasks");
+      if (oldTasks) {
+        const parsed = JSON.parse(oldTasks);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log("Migrando tareas antiguas...");
+          const currentLocalTasks = localStorage.getItem(`local-tasks-local-proj`);
+          const existing = currentLocalTasks ? JSON.parse(currentLocalTasks) : [];
+          // Evitar duplicados por ID
+          const existingIds = new Set(existing.map((t: any) => t.id));
+          const newTasks = parsed.filter((t: any) => !existingIds.has(t.id));
+          
+          const finalTasks = [...existing, ...newTasks];
+          localStorage.setItem(`local-tasks-local-proj`, JSON.stringify(finalTasks));
+          localStorage.removeItem("local-tasks");
+          
+          if (selectedProject?.id === "local-proj") {
+            setTasks(finalTasks);
+          }
+          addToast(`¡Recuperadas ${newTasks.length} tareas antiguas! 🚀`);
+        }
+      } else {
+        addToast("No se encontraron datos antiguos para reparar ✅");
+      }
+    } catch (err) {
+      console.error("Error reparando datos:", err);
+      addToast("Error al reparar datos", "error");
+    }
+  };
+
   const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
     if (!selectedProject) return;
     try {
@@ -501,12 +533,17 @@ export default function App() {
         addToast("Tarea actualizada ✅");
       } else {
         if (selectedProject.id !== "local-proj") {
-          await addDoc(collection(db, `projects/${selectedProject.id}/tasks`), taskData);
+          await addDoc(collection(db, `projects/${selectedProject.id}/tasks`), {
+            ...taskData,
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now()
+          });
         } else {
           const newTask = { 
             ...taskData, 
             id: Math.random().toString(36).substr(2, 9), 
-            createdAt: new Date().toISOString() 
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
           };
           const updatedTasks = [...tasks, newTask];
           setTasks(updatedTasks);
@@ -1408,9 +1445,28 @@ export default function App() {
                 <textarea className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 h-20 resize-none outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Descripción corta..." value={projectForm.description} onChange={(e) => setProjectForm({...projectForm, description: e.target.value})} />
                 <div className="flex gap-4 pt-4">
                   <button type="button" onClick={() => setShowProjectModal(false)} className="btn-secondary flex-1 justify-center">Cancelar</button>
-                  <button type="submit" className="btn-primary flex-1 justify-center">Crear Proyecto</button>
+                  <button type="submit" className="btn-primary w-full justify-center">Guardar Cambios</button>
                 </div>
               </form>
+
+              <div className="glass-card p-8 border-l-4 border-rose-500 mt-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 bg-rose-50 text-rose-500 rounded-2xl shadow-sm"><AlertCircle /></div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-800">Zona de Rescate</h3>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Recuperación de Actividades</p>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                  Si tus tareas locales no aparecen, usa este botón para buscarlas en el almacenamiento antiguo del navegador.
+                </p>
+                <button 
+                  onClick={repairLocalData}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-xl"
+                >
+                  🚀 Reparar y Recuperar Actividades
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
