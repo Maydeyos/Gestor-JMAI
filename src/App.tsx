@@ -1,3 +1,7 @@
+/**
+ * Gestor JMAI - Versión 1.0.1 (Data Recovery & UI Repair)
+ * Fecha: 2026-04-06
+ */
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   Plus, 
