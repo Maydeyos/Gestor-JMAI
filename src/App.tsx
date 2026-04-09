@@ -165,7 +165,11 @@ export default function App() {
       setLoading(false);
     }, (error) => {
       console.error("Error al cargar proyectos de Firestore:", error);
-      // Fallback total a locales si falla el snapshot
+      // DETECCION DE PERMISOS: Si falla por permisos, forzar modo local de inmediato
+      if (error.code === 'permission-denied') {
+        console.warn("Acceso denegado a Firestore. Activando Modo Rescate Local.");
+      }
+      
       const storedLocalProjs = localStorage.getItem("local-projects");
       if (storedLocalProjs) {
         const localProjs = JSON.parse(storedLocalProjs);
@@ -218,8 +222,17 @@ export default function App() {
       setTasks(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Task)));
     }, (err) => {
       console.error("Error cargando tareas:", err);
+      // Si falla por permisos, intentamos cargar de localstorage como fallback
       const stored = localStorage.getItem(`local-tasks-${selectedProject.id}`);
-      if (stored) setTasks(JSON.parse(stored));
+      if (stored) {
+        setTasks(JSON.parse(stored));
+      } else if (err.code === 'permission-denied') {
+        // Si no hay nada en esa clave, intentamos la clave genérica de rescate
+        const legacyStored = localStorage.getItem("local-tasks");
+        if (legacyStored) {
+          addToast("Se detectaron tareas antiguas. Pulsa 'Reparar' en Ajustes para recuperarlas.", "error");
+        }
+      }
     });
     return () => unsubscribe();
   }, [selectedProject]);
@@ -1457,18 +1470,19 @@ export default function App() {
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-3 bg-rose-50 text-rose-500 rounded-2xl shadow-sm"><AlertCircle /></div>
                   <div>
-                    <h3 className="text-xl font-black text-slate-800">Zona de Rescate</h3>
-                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Recuperación de Actividades</p>
+                    <h3 className="text-xl font-black text-rose-600">⚠ Modo Rescate Activado</h3>
+                    <p className="text-xs text-rose-400 font-bold uppercase tracking-widest">Recuperación de Actividades</p>
                   </div>
                 </div>
                 <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-                  Si tus tareas locales no aparecen, usa este botón para buscarlas en el almacenamiento antiguo del navegador.
+                  Si tu dashboard está vacío pero tenías tareas antes, es probable que estén en el almacenamiento antiguo. 
+                  Pulsa el botón de abajo para traerlas de vuelta al proyecto actual.
                 </p>
                 <button 
                   onClick={repairLocalData}
-                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-xl"
+                  className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center justify-center gap-3 shadow-xl"
                 >
-                  🚀 Reparar y Recuperar Actividades
+                  🚀 REPARAR Y RECUPERAR MIS TAREAS
                 </button>
               </div>
             </motion.div>
