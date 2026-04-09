@@ -136,15 +136,27 @@ export default function App() {
       const storedLocalProjs = localStorage.getItem("local-projects");
       if (storedLocalProjs) {
         const localProjs = JSON.parse(storedLocalProjs);
-        // Filtrar duplicados por si acaso
         const cloudIds = projs.map(p => p.id);
         const filteredLocals = localProjs.filter((lp: Project) => !cloudIds.includes(lp.id));
         projs = [...projs, ...filteredLocals];
       }
       
-      console.log("Proyectos cargados (Nube + Local):", projs.length);
+      // ASEGURAR VISIBILIDAD DE PROYECTO LOCAL: Si hay tareas recuperadas, mostrarlo siempre
+      const recoveredTasks = localStorage.getItem("local-tasks-local-proj");
+      const hasRecoveredTasks = recoveredTasks && JSON.parse(recoveredTasks).length > 0;
       
-      // Si sigue sin haber nada, añadir el por defecto
+      if (hasRecoveredTasks && !projs.find(p => p.id === "local-proj")) {
+        projs.push({ 
+          id: "local-proj", 
+          name: "Proyecto JMAI (Local)", 
+          description: "Tareas recuperadas localmente",
+          telegramBotToken: BOT_TOKEN,
+          telegramChatId: CHAT_ID,
+          ownerId: "default_user"
+        });
+      }
+
+      // Si sigue sin haber nada de nada, añadir el por defecto
       if (projs.length === 0) {
         projs = [{ 
           id: "local-proj", 
@@ -158,9 +170,11 @@ export default function App() {
 
       setProjects(projs);
       
-      // Auto-seleccionar primer proyecto y asegurar credenciales
+      // Auto-seleccionar si no hay nada seleccionado
       if (projs.length > 0 && !selectedProject) {
-        setSelectedProject(projs[0]);
+        // Priorizar el proyecto de la nube si existe, si no el local
+        const cloudProj = projs.find(p => p.id !== "local-proj");
+        setSelectedProject(cloudProj || projs[0]);
       }
       setLoading(false);
     }, (error) => {
@@ -485,7 +499,6 @@ export default function App() {
           console.log("Migrando tareas antiguas...");
           const currentLocalTasks = localStorage.getItem(`local-tasks-local-proj`);
           const existing = currentLocalTasks ? JSON.parse(currentLocalTasks) : [];
-          // Evitar duplicados por ID
           const existingIds = new Set(existing.map((t: any) => t.id));
           const newTasks = parsed.filter((t: any) => !existingIds.has(t.id));
           
@@ -493,10 +506,9 @@ export default function App() {
           localStorage.setItem(`local-tasks-local-proj`, JSON.stringify(finalTasks));
           localStorage.removeItem("local-tasks");
           
-          if (selectedProject?.id === "local-proj") {
-            setTasks(finalTasks);
-          }
-          addToast(`¡Recuperadas ${newTasks.length} tareas antiguas! 🚀`);
+          // Forzar recarga de proyectos para que aparezca "Proyecto JMAI (Local)"
+          window.location.reload(); 
+          addToast(`¡Recuperadas ${newTasks.length} tareas! Selecciona el Proyecto Local para verlas. 🚀`);
         }
       } else {
         addToast("No se encontraron datos antiguos para reparar ✅");
@@ -504,6 +516,51 @@ export default function App() {
     } catch (err) {
       console.error("Error reparando datos:", err);
       addToast("Error al reparar datos", "error");
+    }
+  };
+
+  const syncTasksToCloud = async () => {
+    if (!selectedProject || selectedProject.id === "local-proj") {
+      addToast("Selecciona un proyecto de la nube como destino primero.", "error");
+      return;
+    }
+
+    const localTasksStr = localStorage.getItem("local-tasks-local-proj");
+    if (!localTasksStr) {
+      addToast("No hay tareas locales para sincronizar.", "error");
+      return;
+    }
+
+    const localTasks = JSON.parse(localTasksStr);
+    if (localTasks.length === 0) {
+      addToast("No hay tareas locales para sincronizar.", "error");
+      return;
+    }
+
+    addToast(`Sincronizando ${localTasks.length} tareas a la nube... ☁️`);
+    
+    try {
+      let count = 0;
+      for (const task of localTasks) {
+        const { id, ...cleanTask } = task; // Quitar ID local
+        await addDoc(collection(db, `projects/${selectedProject.id}/tasks`), {
+          ...cleanTask,
+          projectId: selectedProject.id,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        });
+        count++;
+      }
+      
+      // Limpiar local storage tras éxito
+      localStorage.removeItem("local-tasks-local-proj");
+      addToast(`¡Éxito! ${count} tareas subidas a ${selectedProject.name} ✅`, "success");
+      
+      // Actualizar vista
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (err: any) {
+      console.error("Error sincronizando:", err);
+      addToast(`Error: ${err.message}`, "error");
     }
   };
 
@@ -1232,42 +1289,83 @@ export default function App() {
             )}
 
             {activeTab === 'settings' && (
-              <motion.div key="settings" className="max-w-2xl mx-auto glass-card p-8">
-                <h3 className="text-xl mb-8">Ajustes del Proyecto</h3>
-                <form onSubmit={handleUpdateSettings} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormGroup 
-                      label="Bot Token (Telegram)" 
-                      value={selectedProject?.telegramBotToken} 
-                      onChange={(val) => selectedProject && setSelectedProject({...selectedProject, telegramBotToken: val})}
-                    />
-                    <FormGroup 
-                      label="Chat ID" 
-                      value={selectedProject?.telegramChatId} 
-                      onChange={(val) => selectedProject && setSelectedProject({...selectedProject, telegramChatId: val})}
-                    />
+              <motion.div key="settings" className="space-y-6">
+                <div className="max-w-2xl mx-auto glass-card p-8">
+                  <h3 className="text-xl mb-8">Ajustes del Proyecto</h3>
+                  <form onSubmit={handleUpdateSettings} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormGroup 
+                        label="Bot Token (Telegram)" 
+                        value={selectedProject?.telegramBotToken} 
+                        onChange={(val) => selectedProject && setSelectedProject({...selectedProject, telegramBotToken: val})}
+                      />
+                      <FormGroup 
+                        label="Chat ID" 
+                        value={selectedProject?.telegramChatId} 
+                        onChange={(val) => selectedProject && setSelectedProject({...selectedProject, telegramChatId: val})}
+                      />
+                    </div>
+                    <div className="pt-4 flex justify-end gap-3 italic text-[10px] text-slate-400">
+                      * Si los campos están vacíos, se usará el Bot JMAI por defecto.
+                    </div>
+                    <div className="pt-2 flex justify-end gap-3">
+                      <button 
+                        type="button" 
+                        onClick={handleRepairConfig}
+                        className="px-4 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-amber-200"
+                      >
+                        Reparar con Bot JMAI 🛠️
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={handleTestTelegram}
+                        className="btn-secondary"
+                      >
+                        Probar Conexión
+                      </button>
+                      <button type="submit" className="btn-primary shadow-lg shadow-indigo-100">Guardar Configuración</button>
+                    </div>
+                  </form>
+                </div>
+
+                <div className="max-w-2xl mx-auto glass-card p-8 border-l-4 border-indigo-500">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-indigo-50 text-indigo-500 rounded-2xl shadow-sm"><Send /></div>
+                    <div>
+                      <h3 className="text-xl font-black text-indigo-600">Sincronización Cloud</h3>
+                      <p className="text-xs text-indigo-400 font-bold uppercase tracking-widest">Migrar Datos a Firebase</p>
+                    </div>
                   </div>
-                  <div className="pt-4 flex justify-end gap-3 italic text-[10px] text-slate-400">
-                    * Si los campos están vacíos, se usará el Bot JMAI por defecto.
+                  <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                    Si tienes tareas en el proyecto local, puedes subirlas definitivamente al proyecto de Firebase seleccionado.
+                  </p>
+                  <button 
+                    onClick={syncTasksToCloud}
+                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 shadow-xl"
+                  >
+                    ☁️ SUBIR TAREAS LOCALES A LA NUBE (FIREBASE)
+                  </button>
+                </div>
+
+                <div className="max-w-2xl mx-auto glass-card p-8 border-l-4 border-rose-500">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-rose-50 text-rose-500 rounded-2xl shadow-sm"><AlertCircle /></div>
+                    <div>
+                      <h3 className="text-xl font-black text-rose-600">⚠ Modo Rescate Activado</h3>
+                      <p className="text-xs text-rose-400 font-bold uppercase tracking-widest">Recuperación de Actividades</p>
+                    </div>
                   </div>
-                  <div className="pt-2 flex justify-end gap-3">
-                    <button 
-                      type="button" 
-                      onClick={handleRepairConfig}
-                      className="px-4 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-amber-200"
-                    >
-                      Reparar con Bot JMAI 🛠️
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={handleTestTelegram}
-                      className="btn-secondary"
-                    >
-                      Probar Conexión
-                    </button>
-                    <button type="submit" className="btn-primary shadow-lg shadow-indigo-100">Guardar Configuración</button>
-                  </div>
-                </form>
+                  <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                    Si tu dashboard está vacío pero tenías tareas antes, es probable que estén en el almacenamiento antiguo. 
+                    Pulsa el botón de abajo para traerlas de vuelta al proyecto actual.
+                  </p>
+                  <button 
+                    onClick={repairLocalData}
+                    className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center justify-center gap-3 shadow-xl"
+                  >
+                    🚀 REPARAR Y RECUPERAR MIS TAREAS
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1395,7 +1493,7 @@ export default function App() {
                   </div>
                   
                   <div className="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                    {taskForm.subtasks.map((st, idx) => (
+                    {Array.isArray(taskForm.subtasks) && taskForm.subtasks.map((st, idx) => (
                       <div key={st.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg group">
                         <input 
                           type="checkbox"
@@ -1466,25 +1564,6 @@ export default function App() {
                 </div>
               </form>
 
-              <div className="glass-card p-8 border-l-4 border-rose-500 mt-8">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-3 bg-rose-50 text-rose-500 rounded-2xl shadow-sm"><AlertCircle /></div>
-                  <div>
-                    <h3 className="text-xl font-black text-rose-600">⚠ Modo Rescate Activado</h3>
-                    <p className="text-xs text-rose-400 font-bold uppercase tracking-widest">Recuperación de Actividades</p>
-                  </div>
-                </div>
-                <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-                  Si tu dashboard está vacío pero tenías tareas antes, es probable que estén en el almacenamiento antiguo. 
-                  Pulsa el botón de abajo para traerlas de vuelta al proyecto actual.
-                </p>
-                <button 
-                  onClick={repairLocalData}
-                  className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center justify-center gap-3 shadow-xl"
-                >
-                  🚀 REPARAR Y RECUPERAR MIS TAREAS
-                </button>
-              </div>
             </motion.div>
           </div>
         )}

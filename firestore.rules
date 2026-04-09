@@ -17,15 +17,15 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
       
       match /tasks/{taskId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if true;
       }
     }
     
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if true;
     }
   }
 }

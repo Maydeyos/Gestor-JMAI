@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import path from "path";
+import * as fs from "fs";
 import cron from "node-cron";
 import axios from "axios";
 import { format } from "date-fns";
@@ -12,9 +13,11 @@ import firebaseConfig from "./firebase-applet-config.json";
 
 dotenv.config({ path: ".env.local" });
 
-// Initialize Firebase Admin
-// In this environment, we can usually initialize with just the project ID
+// Initialize Firebase Admin with Service Account
+const serviceAccountPath = path.join(process.cwd(), "service-account.json");
+
 const adminApp = initializeApp({
+  credential: cert(serviceAccountPath),
   projectId: firebaseConfig.projectId
 });
 const adminDb = getFirestore(adminApp, firebaseConfig.firestoreDatabaseId || "(default)");
