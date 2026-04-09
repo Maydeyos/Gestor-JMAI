@@ -170,12 +170,18 @@ export default function App() {
 
       setProjects(projs);
       
-      // Auto-seleccionar si no hay nada seleccionado
-      if (projs.length > 0 && !selectedProject) {
-        // Priorizar el proyecto de la nube si existe, si no el local
-        const cloudProj = projs.find(p => p.id !== "local-proj");
-        setSelectedProject(cloudProj || projs[0]);
+      // AUTO-SELECCIÓN INTELIGENTE:
+      // 1. Si no hay nada seleccionado, buscar el proyecto de la nube.
+      // 2. Si lo que está seleccionado es el "Proyecto Local" pero ha aparecido uno de la nube, cambiar a la nube.
+      const cloudProj = projs.find(p => p.id !== "local-proj");
+      
+      if (cloudProj && (!selectedProject || selectedProject.id === "local-proj")) {
+        console.log("Forzando selección de proyecto en la nube para sincronización compartida:", cloudProj.name);
+        setSelectedProject(cloudProj);
+      } else if (!selectedProject && projs.length > 0) {
+        setSelectedProject(projs[0]);
       }
+      
       setLoading(false);
     }, (error) => {
       console.error("Error al cargar proyectos de Firestore:", error);
